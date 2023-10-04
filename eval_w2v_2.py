@@ -1,7 +1,7 @@
 
 PATH="C:/Users/Yanis/Documents/Cours Centrale Marseille/NLP/tlnl2/tp/Le_comte_de_Monte_Cristo.100.sim"
-PATH_EMBEDDING="C:/Users/Yanis/embeddings.txt"
-
+PATH_EMBEDDING="/." #"C:/Users/Yanis/embeddings.txt"
+PATH_EMBEDDING="C:/Users/Yanis/Documents/Cours Centrale Marseille/NLP/tlnl3/embeddings.txt"
 # Définition d'une liste pour chaque colonne
 colonne1 = []
 colonne2 = []
