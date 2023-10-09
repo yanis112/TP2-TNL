@@ -1,1 +1,5 @@
+
+
 Pour entrainer l'algo uiliser world2vec-amélioration.py pour tester utiliser eval_w2v
+
+Pour entrainer la version améliorée, lancer le fichier commençant par skip-gram.
