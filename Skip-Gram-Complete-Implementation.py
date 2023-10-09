@@ -1,16 +1,14 @@
-import torch
-import torch.nn as nn
-import torch.optim as optim
-from torch.utils.data import DataLoader, Dataset
-from collections import Counter
-import random
-import math
-
-# Step 1: Data Preparation (Assuming you have tokenized_data)
 import numpy as np
 from nltk.tokenize import word_tokenize  # Assurez-vous d'avoir installé NLTK via pip
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+import multiprocessing
+from collections import Counter
+import math
+import random
+from sklearn.metrics.pairwise import cosine_similarity
+import random
+
 
 
 PATH="C:/Users/Yanis/Documents/Cours Centrale Marseille/NLP/tlnl_tp1_data/alexandre_dumas/Le_comte_de_Monte_Cristo.test.tok"
@@ -33,141 +31,293 @@ def openfile(file: str) -> list[str]:
 
     return text
 
-texte=openfile(PATH)
+#On définit le texte et le vocabulaire
 
-# Step 2: Build Vocabulary
-word_counts = Counter()
-for sentence in texte:
-    word_counts.update(sentence)
+texte=openfile(PATH) #liste de mots du texte
+vocab=list(set(texte))  #liste des mots uniques du texte
 
-vocab = {word: idx for idx, (word, _) in enumerate(word_counts.most_common())}
-idx_to_word = {idx: word for word, idx in vocab.items()}
-vocab_size = len(vocab)
+# Taille de la fenêtre glissante
+window_size = 3
 
-# Step 3: Subsampling of Frequent Words
-def subsample_frequent_words(data, threshold=1e-5):
-    total_words = sum(word_counts.values())
-    word_freqs = {word: count / total_words for word, count in word_counts.items()}
-    subsampled_data = []
-    for sentence in data:
-        subsampled_sentence = [word for word in sentence if random.uniform(0, 1) > (1 - math.sqrt(threshold / word_freqs[word]))]
-        if len(subsampled_sentence) > 1:
-            subsampled_data.append(subsampled_sentence)
-    return subsampled_data
 
-tokenized_data = subsample_frequent_words(tokenized_data)
+def sigmoid(x):
+    ''' Fonction sigmoïde
+    '''
+    return 1 / (1 + np.exp(-x))
 
-# Step 4: Create Skip-gram Dataset
-class SkipGramDataset(Dataset):
-    def __init__(self, data, window_size):
-        self.data = data
-        self.window_size = window_size
-        self.samples = self._generate_samples()
+def proba_positive(m, c):
+    """
+    Calcule la probabilité qu'un exemple soit positif.
+    """
+    dot_product = np.dot(m, c)
+    return sigmoid(dot_product)
 
-    def __len__(self):
-        return len(self.samples)
+def proba_negative(m, c):
+    dot_product = np.dot(m, c)
+    return 1 - sigmoid(dot_product)
 
-    def __getitem__(self, idx):
-        return self.samples[idx]
 
-    def _generate_samples(self):
-        samples = []
-        for sentence in self.data:
-            for i, target_word in enumerate(sentence):
-                start = max(0, i - self.window_size)
-                end = min(len(sentence), i + self.window_size + 1)
-                for j in range(start, end):
-                    if j != i:
-                        samples.append((vocab[target_word], vocab[sentence[j]]))
-        return samples
 
-# Step 5: Define Hierarchical Softmax
-class HierarchicalSoftmax(nn.Module):
-    def __init__(self, vocab_size, embedding_dim):
-        super(HierarchicalSoftmax, self).__init__()
-        self.embedding_dim = embedding_dim
-        self.vocab_size = vocab_size
-        self.tree = {}  # Construct your hierarchical softmax tree here
+def calculate_deletion_probabilities(text):
+    '''
+    renvoie le dictionnaire des probabilité de délétion
+    '''
+    # Tokenisation : Divisez le texte en mots
+     # Vous pouvez utiliser une tokenisation plus avancée si nécessaire
+    
+    # Utilisez Counter pour compter les occurrences de chaque mot
+    word_frequencies = Counter(text)
+    
+    # Calculez le nombre total de mots dans le corpus
+    total_words = len(text)
+    
+    # Calculez les fréquences relatives de chaque mot
+    relative_frequencies = {word: frequency**(3/4) / total_words for word, frequency in word_frequencies.items()}
+    
+    
+    return relative_frequencies
 
-    def forward(self, target):
-        # Implement hierarchical softmax here
-        pass
+def calculate_subsampling_probabilities(text, seuil):
+    '''
+    renvoie le dictionnaire des probabilité de délétion
+    '''
+    # Tokenisation : Divisez le texte en mots
+     # Vous pouvez utiliser une tokenisation plus avancée si nécessaire
+    
+    # Utilisez Counter pour compter les occurrences de chaque mot
+    word_frequencies = Counter(text)
+    
+    # Calculez le nombre total de mots dans le corpus
+    total_words = len(text)
+    
+    # Calculez les fréquences relatives de chaque mot
+    relative_frequencies = {word: frequency / total_words for word, frequency in word_frequencies.items()}
+    
+    # Calculez les probabilités de suppression pour chaque mot
+    deletion_probabilities = {word: 1 - math.sqrt(seuil / relative_frequency) for word, relative_frequency in relative_frequencies.items()}
+    
+    return deletion_probabilities
 
-# Step 6: Define Negative Sampling
-class NegativeSampling(nn.Module):
-    def __init__(self, vocab_size, embedding_dim, num_neg_samples):
-        super(NegativeSampling, self).__init__()
-        self.vocab_size = vocab_size
-        self.embedding_dim = embedding_dim
-        self.num_neg_samples = num_neg_samples
-        self.embeddings = nn.Embedding(vocab_size, embedding_dim)
+def negative_sampling(dictionnaire_probabilites, k):
+    ''' 
+    Fonction qui renvoie une liste de k mots tirés aléatoirement selon les probabilités du dictionnaire
+    '''
 
-    def forward(self, target, context, negative_samples):
-        target_embeds = self.embeddings(target)
-        context_embeds = self.embeddings(context)
-        negative_embeds = self.embeddings(negative_samples)
-        return target_embeds, context_embeds, negative_embeds
+    if k <= 0:
+        raise ValueError("La valeur de k doit être supérieure à zéro.")
+    mots_choisis = []
 
-# Step 7: Define Skip-gram Model
-class SkipGram(nn.Module):
-    def __init__(self, vocab_size, embedding_dim, num_neg_samples):
-        super(SkipGram, self).__init__()
-        self.hierarchical_softmax = HierarchicalSoftmax(vocab_size, embedding_dim)
-        self.negative_sampling = NegativeSampling(vocab_size, embedding_dim, num_neg_samples)
+    for _ in range(k):
+        # Générer un nombre aléatoire pondéré par les probabilités du dictionnaire
+        choix = random.choices(list(dictionnaire_probabilites.keys()), list(dictionnaire_probabilites.values()))[0]
+        mots_choisis.append(choix)
 
-    def forward(self, target, context, negative_samples):
-        # Implement Skip-gram with hierarchical softmax or negative sampling here
-        pass
+    return mots_choisis
 
-# Step 8: Define Training Loop
-def train_skipgram(model, dataloader, optimizer, num_epochs):
-    for epoch in range(num_epochs):
-        total_loss = 0
-        for target, context, negative_samples in dataloader:
-            target = target.to(device)
-            context = context.to(device)
-            negative_samples = negative_samples.to(device)
+def subsampling(text):
+    '''
+    Fonction qui réalise le subsampling du texte: on supprime une partie des mots qui ont des occurences trop nombreuses EX: "le" car ils ne contiennent pas d'info
+    la probabilité de supprimer le mot dépend d'un seuil et de sa fréquence dans le corpus.
+    '''
+    dictio_suppr=calculate_subsampling_probabilities(text, 10e-5)
+    new_text=[]
+    for k in text:
+        probkeep= 1-dictio_suppr[k]
+        if random.random()<probkeep:
+            new_text.append(k)
+    return(new_text)
 
-            optimizer.zero_grad()
+# Fonction pour calculer la perte
+def compute_loss(m, cpos, cneg_list):
+    """
+    Calcule la valeur de la fonction de perte définie par la formule donnée.
 
-            target_embeds, context_embeds, negative_embeds = model(target, context, negative_samples)
+    Args:
+        m (numpy.ndarray): Le vecteur m.
+        cpos (numpy.ndarray): Le vecteur cpos.
+        cneg_list (list): Une liste de vecteurs cneg.
 
-            # Calculate your loss here (either hierarchical softmax or negative sampling)
+    Returns:
+        float: La valeur de la perte.
+    """
+    p_pos = sigmoid(np.dot(cpos, m))
+    p_neg_sum = np.sum(np.fromiter((np.log(sigmoid(-np.dot(cneg, m))) for cneg in cneg_list), dtype=float))
 
-            loss.backward()
-            optimizer.step()
+    
+    loss = -np.log(p_pos)-p_neg_sum
+    return loss
 
-            total_loss += loss.item()
+# Fonction pour calculer le gradient par rapport à cpos
+def compute_grad_cpos(m, cpos):
+    """
+    Calcule le gradient de la perte par rapport au vecteur cpos.
 
-        print(f"Epoch {epoch + 1}/{num_epochs}, Loss: {total_loss}")
+    Args:
+        m (numpy.ndarray): Le vecteur m.
+        cpos (numpy.ndarray): Le vecteur cpos.
 
-# Step 9: Hyperparameters
-embedding_dim = 100
-window_size = 5
-learning_rate = 0.01
-batch_size = 64
-num_epochs = 10
-num_neg_samples = 10  # Number of negative samples for Negative Sampling
+    Returns:
+        numpy.ndarray: Le gradient par rapport à cpos.
+    """
+    grad_cpos = (sigmoid(np.dot(cpos, m)) - 1) * m
+    return grad_cpos
 
-# Step 10: Create DataLoader
-skipgram_dataset = SkipGramDataset(tokenized_data, window_size)
-dataloader = DataLoader(skipgram_dataset, batch_size=batch_size, shuffle=True)
+# Fonction pour calculer le gradient par rapport à cneg
+def compute_grad_cneg(m, cneg):
+    """
+    Calcule le gradient de la perte par rapport à un vecteur cneg.
 
-# Step 11: Initialize Model and Optimizer
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = SkipGram(vocab_size, embedding_dim, num_neg_samples).to(device)
-optimizer = optim.SGD(model.parameters(), lr=learning_rate)
+    Args:
+        m (numpy.ndarray): Le vecteur m.
+        cneg (numpy.ndarray): Le vecteur cneg.
 
-# Step 12: Train the Model
-train_skipgram(model, dataloader, optimizer, num_epochs)
+    Returns:
+        numpy.ndarray: Le gradient par rapport à cneg.
+    """
+    grad_cneg = sigmoid(np.dot(cneg, m)) * m
+    return grad_cneg
 
-# Step 13: Get Word Embeddings
-# Extract word embeddings from the model's embeddings layer.
+# Fonction pour calculer le gradient par rapport à m
+def compute_grad_m(m, cpos, cneg_list):
+    """
+    Calcule le gradient de la perte par rapport au vecteur m.
 
-# Example: Get the embedding for a specific word
-word = "word_to_lookup"
-word_idx = vocab[word]
-word_embedding = model.negative_sampling.embeddings(torch.LongTensor([word_idx]).to(device)).squeeze().detach().cpu().numpy()
+    Args:
+        m (numpy.ndarray): Le vecteur m.
+        cpos (numpy.ndarray): Le vecteur cpos.
+        cneg_list (list): Une liste de vecteurs cneg.
 
-# Step 14: Save the Model and Embeddings
-# You can save the trained model and embeddings for later use.
+    Returns:
+        numpy.ndarray: Le gradient par rapport à m.
+    """
+    grad_m = (sigmoid(np.dot(cpos, m)) - 1) * cpos
+    for cneg in cneg_list:
+        grad_m += sigmoid(np.dot(cneg, m)) * cneg
+    return grad_m
+
+
+
+
+def select_negative_samples(context_word, vocab, word_embeddings, threshold, num_negatives):
+    negative_samples = []
+    count_negatives = 0
+
+    vocabulary=vocab
+    # Mélangez le vocabulaire pour parcourir aléatoirement
+    random.shuffle(vocabulary)
+    
+    for word in vocabulary:
+        # Vérifiez si vous avez déjà sélectionné suffisamment de mots négatifs
+        if count_negatives >= num_negatives:
+            break
+        
+        # Calcul de la similarité entre le mot cible et le mot potentiellement négatif
+        similarity = cosine_similarity(word_embeddings[word].reshape(1,-1),word_embeddings[context_word].reshape(1,-1))[0][0]
+
+        #print(similarity)
+        # Si la similarité est inférieure au seuil, ajoutez le mot potentiellement négatif
+        if similarity > threshold:
+            negative_samples.append(word)
+            count_negatives += 1  # Incrémentez le compteur
+                
+    return negative_samples
+
+# Fonction pour créer des embeddings aléatoires pour chaque mot unique
+def create_word_embeddings(text, embedding_size):
+    # Initialiser un dictionnaire pour stocker les embeddings de chaque mot
+    word_embeddings = {}
+    
+    # Générer des embeddings aléatoires pour chaque mot du vocabulaire
+    for word in vocab:
+        word_embeddings[word] = np.random.rand(embedding_size)
+    
+    return word_embeddings
+
+# Fonction pour l'entraînement des embeddings
+def train_word_embeddings(text, embedding_size, k, window_size,learning_rate,neg_number):
+    # Créer des embeddings initiaux pour chaque mot du texte
+    word_embeddings = create_word_embeddings(text, embedding_size)
+
+    #Nous appliquons le subsampling du texte pour éliminer les mots trop redondants
+    text=subsampling(text)
+
+    dict_frequencies=calculate_deletion_probabilities(text) #dictionnaire des probabilités de délétion pour le subsampling
+     # Initialiser une liste pour enregistrer la perte à chaque itération
+    loss_history = []
+
+    
+    # Boucle d'entraînement sur un nombre d'itérations (k)
+    for iteration in range(k):
+        print(f"Itération {iteration + 1}/{k}")
+        # Parcourir chaque mot dans le texte
+        for target_word_index, target_word in enumerate(tqdm(text)):
+            # Choisissez aléatoirement un mot contexte dans la fenêtre centrée
+            window_start = max(0, target_word_index - window_size)
+            window_end = min(len(text), target_word_index + window_size + 1)
+            context_word_index = np.random.randint(window_start, window_end)
+            while target_word_index==context_word_index:
+                context_word_index = np.random.randint(window_start, window_end)
+            context_word = text[context_word_index]
+
+            # Sélectionnez aléatoirement des mots négatifs par le biais d'un échantillonnage négatif
+
+            negative_samples=negative_sampling(dict_frequencies,neg_number)
+
+            # Calculez les gradients en utilisant les fonctions de dérivées
+
+            cpos = word_embeddings[context_word]
+            cneg_list = [word_embeddings[neg_word] for neg_word in negative_samples]
+            
+            grad_m = compute_grad_m(word_embeddings[target_word], cpos, cneg_list)
+            grad_cpos = compute_grad_cpos(word_embeddings[target_word], cpos)
+            grad_cneg_list = [compute_grad_cneg(word_embeddings[target_word], cneg) for cneg in cneg_list]
+            
+            # Mettez à jour les embeddings en utilisant la descente de gradient stochastique
+            # Taux d'apprentissage (ajustez selon vos besoins)
+            word_embeddings[target_word] -= learning_rate * grad_m
+            word_embeddings[context_word] -= learning_rate * grad_cpos
+            for i, neg_word in enumerate(negative_samples):
+                word_embeddings[neg_word] -= learning_rate * grad_cneg_list[i]
+            # Calculez et enregistrez la perte à la fin de chaque itération
+            current_loss = compute_loss(word_embeddings[target_word], cpos, cneg_list)
+            loss_history.append(current_loss)
+    
+    
+    return word_embeddings, loss_history
+
+
+# Fonction pour enregistrer les embeddings dans un fichier texte au format spécifié
+def save_word_embeddings_to_file(embeddings, filename):
+    with open(filename, 'w', encoding='utf8') as f:
+        # Écrire le nombre de plongements et la dimension
+        f.write(f"{len(embeddings)} {len(embeddings[next(iter(embeddings))])}\n")
+        
+        # Écrire chaque mot et son embedding
+        for word, embedding in embeddings.items():
+            embedding_str = ' '.join(str(value) for value in embedding)
+            f.write(f"{word} {embedding_str}\n")
+
+
+# Fonction pour tracer la courbe d'apprentissage
+def plot_loss_curve(loss_history):
+    plt.plot(range(1, len(loss_history) + 1), loss_history)
+    plt.xlabel('Itération')
+    plt.ylabel('Perte')
+    plt.title('Courbe d\'apprentissage')
+    plt.show()
+
+# Paramètres
+embedding_size = 100  # Taille des embeddings (ajustez selon vos besoins)
+k = 5 # Nombre d'itérations (ajustez selon vos besoins)
+window_size = 2  # Taille de la fenêtre centrée k mots à gauche k mots à droites (ajustez selon vos besoins)
+learning_rate = 0.1  # Taux d'apprentissage (ajustez selon vos besoins)
+neg_number=10
+# Entraînement des embeddings
+
+if __name__ == '__main__':
+
+    trained_word_embeddings,list_loss = train_word_embeddings(texte, embedding_size, k, window_size,learning_rate,neg_number)
+    #trained_word_embeddings,list_loss=train_word_embeddings_parallel(texte, embedding_size, k, window_size,learning_rate,neg_number)
+    save_word_embeddings_to_file(trained_word_embeddings,'embeddings.txt')
+    print("embeddings saved in file !!")
+    plot_loss_curve(list_loss)
