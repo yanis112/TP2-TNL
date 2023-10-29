@@ -1,10 +1,9 @@
 import numpy as np
-from nltk.tokenize import word_tokenize  # Assurez-vous d'avoir installé NLTK via pip
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
-PATH="C:/Users/Yanis/Documents/Cours Centrale Marseille/NLP/tlnl_tp1_data/alexandre_dumas/Le_comte_de_Monte_Cristo.test.tok"
-PATH="C:/Users/Yanis/Documents/Cours Centrale Marseille/NLP/tlnl_tp1_data/alexandre_dumas/Le_comte_de_Monte_Cristo.train.tok"
+PATH_test="./data/Le_comte_de_Monte_Cristo.test.tok"
+PATH_train="./data/Le_comte_de_Monte_Cristo.train.tok"
 
 def openfile(file: str) -> list[str]:
     """
@@ -23,12 +22,8 @@ def openfile(file: str) -> list[str]:
 
     return text
 
-texte=openfile(PATH)
-
-
-#print(texte)
-
 # Fonction pour créer la matrice de co-occurrence
+
 def create_co_occurrence_matrix(text, window_size):
     # Tokenisation du texte en mots
     words = text
@@ -41,7 +36,7 @@ def create_co_occurrence_matrix(text, window_size):
     # Remplissage de la matrice de co-occurrence
     for i, target_word in enumerate(words):
         for j in range(max(0, i - window_size), min(len(words), i + window_size + 1)):
-            if i != j:  # Assurez-vous que le mot cible ne soit pas lui-même
+            if i != j:  # S'assurer que le mot cible ne soit pas lui-même
                 context_word = words[j]
                 if context_word in vocab and target_word in vocab:
                     co_occurrence_matrix[vocab.index(target_word)][vocab.index(context_word)] += 1
@@ -51,7 +46,6 @@ def create_co_occurrence_matrix(text, window_size):
 
 # Taille de la fenêtre glissante
 window_size = 3
-
 
 def sigmoid(x):
     return 1 / (1 + np.exp(-x))
@@ -153,23 +147,23 @@ def train_word_embeddings(text, embedding_size, k, window_size,learning_rate,neg
      # Initialiser une liste pour enregistrer la perte à chaque itération
     loss_history = []
     
-    # Boucle d'entraînement sur un nombre d'itérations (k)
+    # Boucle d'entraînement
     for iteration in range(k):
         print(f"Itération {iteration + 1}/{k}")
         # Parcourir chaque mot dans le texte
         for target_word_index, target_word in enumerate(tqdm(text)):
-            # Choisissez aléatoirement un mot contexte dans la fenêtre centrée
+            # Choisir aléatoirement un mot contexte dans la fenêtre centrée
             window_start = max(0, target_word_index - window_size)
             window_end = min(len(text), target_word_index + window_size + 1)
             context_word_index = np.random.randint(window_start, window_end)
             context_word = text[context_word_index]
             
-            # Sélectionnez 4 mots négatifs au hasard
-            #negative_samples = [word for word in text if word != target_word][:4] #PAs con c'est toujours les mêmes !!
+            # Sélectionner 4 mots négatifs au hasard
+            #negative_samples = [word for word in text if word != target_word][:4] #  c'est toujours les mêmes !!
             negative_samples = np.random.choice(text, size=neg_number, replace=False)
             negative_samples = [word for word in negative_samples if word != target_word]
             
-            # Calculez les gradients en utilisant les fonctions de dérivées
+            # Calculer les gradients en utilisant les fonctions de dérivées
             cpos = word_embeddings[context_word]
             cneg_list = [word_embeddings[neg_word] for neg_word in negative_samples]
             
@@ -177,13 +171,12 @@ def train_word_embeddings(text, embedding_size, k, window_size,learning_rate,neg
             grad_cpos = compute_grad_cpos(word_embeddings[target_word], cpos)
             grad_cneg_list = [compute_grad_cneg(word_embeddings[target_word], cneg) for cneg in cneg_list]
             
-            # Mettez à jour les embeddings en utilisant la descente de gradient stochastique
-            # Taux d'apprentissage (ajustez selon vos besoins)
+            # Mettre à jour les embeddings en utilisant la descente de gradient stochastique
             word_embeddings[target_word] -= learning_rate * grad_m
             word_embeddings[context_word] -= learning_rate * grad_cpos
             for i, neg_word in enumerate(negative_samples):
                 word_embeddings[neg_word] -= learning_rate * grad_cneg_list[i]
-            # Calculez et enregistrez la perte à la fin de chaque itération
+            # Calculer et enregistrer la perte à la fin de chaque itération
             current_loss = compute_loss(word_embeddings[target_word], cpos, cneg_list)
             loss_history.append(current_loss)
     
@@ -211,15 +204,16 @@ def plot_loss_curve(loss_history):
     plt.show()
 
 # Paramètres
-embedding_size = 100 #avec 50 on a obtenu 53% accuracy # Taille des embeddings (ajustez selon vos besoins)
-iternb = 5  # Nombre d'itérations (ajustez selon vos besoins)
-window_size = 5  # Taille de la fenêtre centrée (ajustez selon vos besoins)
-learning_rate = 0.1  # Taux d'apprentissage (ajustez selon vos besoins)
-neg_number=10 # nombre de samples out
+embedding_size = 100  # avec 50 on a obtenu 53% accuracy # Taille des embeddings
+iternb = 5  # Nombre d'itérations 
+window_size = 5  # Taille de la fenêtre centrée 
+learning_rate = 0.1  # Taux d'apprentissage 
+neg_number=10  # nombre de samples out
 
-
-# Entraînement des embeddings
-trained_word_embeddings,list_loss = train_word_embeddings(texte, embedding_size, iternb, window_size,learning_rate,neg_number)
-save_word_embeddings_to_file(trained_word_embeddings,'embeddings.txt')
-print("embeddings saved in file !!")
-plot_loss_curve(list_loss)
+if __name__ == "__main__":
+    texte=openfile(PATH_test)
+    # print(texte)
+    trained_word_embeddings,list_loss = train_word_embeddings(texte, embedding_size, iternb, window_size,learning_rate,neg_number)
+    save_word_embeddings_to_file(trained_word_embeddings,'embeddings.txt')
+    print("embeddings saved in file !!")
+    plot_loss_curve(list_loss)

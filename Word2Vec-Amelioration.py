@@ -1,11 +1,12 @@
+from collections import Counter
+import math
 import matplotlib.pyplot as plt
 import numpy as np
-from nltk.tokenize import word_tokenize  # Assurez-vous d'avoir installé NLTK via pip
 from tqdm import tqdm
+from sklearn.metrics.pairwise import cosine_similarity
+import random
 
-
-PATH="C:/Users/Yanis/Documents/Cours Centrale Marseille/NLP/tlnl_tp1_data/alexandre_dumas/Le_comte_de_Monte_Cristo.test.tok"
-PATH="C:/Users/Yanis/Documents/Cours Centrale Marseille/NLP/tlnl_tp1_data/alexandre_dumas/Le_comte_de_Monte_Cristo.train.tok"
+from w2v import PATH_test, PATH_train
 
 def openfile(file: str) -> list[str]:
     """
@@ -24,16 +25,6 @@ def openfile(file: str) -> list[str]:
 
     return text
 
-#On définit le texte et le vocabulaire
-texte=openfile(PATH)
-vocab=list(set(texte))
-
-
-
-# Taille de la fenêtre glissante
-window_size = 3
-
-
 def sigmoid(x):
     return 1 / (1 + np.exp(-x))
 
@@ -44,10 +35,6 @@ def proba_positive(m, c):
 def proba_negative(m, c):
     dot_product = np.dot(m, c)
     return 1 - sigmoid(dot_product)
-
-from collections import Counter
-
-import math
 
 def calculate_deletion_probabilities(text, seuil):
     '''
@@ -70,7 +57,6 @@ def calculate_deletion_probabilities(text, seuil):
     
     return deletion_probabilities
 
-import random
 
 def subsampling(text):
     '''
@@ -84,14 +70,6 @@ def subsampling(text):
         if random.random()<probkeep:
             new_text.append(k)
     return(new_text)
-
-#print(len(texte))
-#print(len(subsampling(texte)))
-#print(subsampling(texte))
-
-# On crée le nouveau texte qui est subsampled
-
-texte=subsampling(texte)
 
 
 # Fonction pour calculer la perte
@@ -129,6 +107,7 @@ def compute_grad_cpos(m, cpos):
     grad_cpos = (sigmoid(np.dot(cpos, m)) - 1) * m
     return grad_cpos
 
+
 # Fonction pour calculer le gradient par rapport à cneg
 def compute_grad_cneg(m, cneg):
     """
@@ -143,6 +122,7 @@ def compute_grad_cneg(m, cneg):
     """
     grad_cneg = sigmoid(np.dot(cneg, m)) * m
     return grad_cneg
+
 
 # Fonction pour calculer le gradient par rapport à m
 def compute_grad_m(m, cpos, cneg_list):
@@ -162,21 +142,17 @@ def compute_grad_m(m, cpos, cneg_list):
         grad_m += sigmoid(np.dot(cneg, m)) * cneg
     return grad_m
 
-from sklearn.metrics.pairwise import cosine_similarity
-import random
-
-
 
 def select_negative_samples(context_word, vocab, word_embeddings, threshold, num_negatives):
     negative_samples = []
     count_negatives = 0
 
     vocabulary=vocab
-    # Mélangez le vocabulaire pour parcourir aléatoirement
+    # Mélanger le vocabulaire pour parcourir aléatoirement
     random.shuffle(vocabulary)
     
     for word in vocabulary:
-        # Vérifiez si vous avez déjà sélectionné suffisamment de mots négatifs
+        # Vérifier s'il y a assez de mots négatifs
         if count_negatives >= num_negatives:
             break
         
@@ -184,10 +160,10 @@ def select_negative_samples(context_word, vocab, word_embeddings, threshold, num
         similarity = cosine_similarity(word_embeddings[word].reshape(1,-1),word_embeddings[context_word].reshape(1,-1))[0][0]
 
         #print(similarity)
-        # Si la similarité est inférieure au seuil, ajoutez le mot potentiellement négatif
+        # Si la similarité est inférieure au seuil, ajouter le mot potentiellement négatif
         if similarity > threshold:
             negative_samples.append(word)
-            count_negatives += 1  # Incrémentez le compteur
+            count_negatives += 1 
                 
     return negative_samples
 
@@ -216,7 +192,7 @@ def train_word_embeddings(text, embedding_size, k, window_size,learning_rate,neg
         print(f"Itération {iteration + 1}/{k}")
         # Parcourir chaque mot dans le texte
         for target_word_index, target_word in enumerate(tqdm(text)):
-            # Choisissez aléatoirement un mot contexte dans la fenêtre centrée
+            # Choisir aléatoirement un mot contexte dans la fenêtre centrée
             window_start = max(0, target_word_index - window_size)
             window_end = min(len(text), target_word_index + window_size + 1)
             context_word_index = np.random.randint(window_start, window_end)
@@ -224,12 +200,9 @@ def train_word_embeddings(text, embedding_size, k, window_size,learning_rate,neg
                 context_word_index = np.random.randint(window_start, window_end)
             context_word = text[context_word_index]
             
-            # Sélectionnez 4 mots négatifs au hasard
-            #negative_samples = [word for word in text if word != target_word][:4] #PAs con c'est toujours les mêmes !!
+            # Sélectionner 4 mots négatifs au hasard
             negative_samples = np.random.choice(text, size=neg_number, replace=False)
             negative_samples = [word for word in negative_samples if word != target_word]
-            #negative_samples = select_negative_samples(context_word, vocab, word_embeddings,-1,4)
-            # Calculez les gradients en utilisant les fonctions de dérivées
             cpos = word_embeddings[context_word]
             cneg_list = [word_embeddings[neg_word] for neg_word in negative_samples]
             
@@ -237,13 +210,11 @@ def train_word_embeddings(text, embedding_size, k, window_size,learning_rate,neg
             grad_cpos = compute_grad_cpos(word_embeddings[target_word], cpos)
             grad_cneg_list = [compute_grad_cneg(word_embeddings[target_word], cneg) for cneg in cneg_list]
             
-            # Mettez à jour les embeddings en utilisant la descente de gradient stochastique
-            # Taux d'apprentissage (ajustez selon vos besoins)
+            # Mettre à jour les embeddings en utilisant la descente de gradient stochastique
             word_embeddings[target_word] -= learning_rate * grad_m
             word_embeddings[context_word] -= learning_rate * grad_cpos
             for i, neg_word in enumerate(negative_samples):
                 word_embeddings[neg_word] -= learning_rate * grad_cneg_list[i]
-            # Calculez et enregistrez la perte à la fin de chaque itération
             current_loss = compute_loss(word_embeddings[target_word], cpos, cneg_list)
             loss_history.append(current_loss)
     
@@ -272,14 +243,24 @@ def plot_loss_curve(loss_history):
     plt.show()
 
 # Paramètres
-embedding_size = 100  # Taille des embeddings (ajustez selon vos besoins)
-k = 5 # Nombre d'itérations (ajustez selon vos besoins)
-window_size = 5  # Taille de la fenêtre centrée (ajustez selon vos besoins)
-learning_rate = 0.1  # Taux d'apprentissage (ajustez selon vos besoins)
+embedding_size = 100  # Taille des embeddings  
+k = 5 # Nombre d'itérations  
+window_size = 5  # Taille de la fenêtre centrée  
+learning_rate = 0.1  # Taux d'apprentissage  
 neg_number=10
-# Entraînement des embeddings
+window_size = 3  # Taille de la fenêtre glissante
 
 if __name__ == '__main__':
+
+    #On définit le texte et le vocabulaire
+    texte=openfile(PATH_test)
+    vocab=list(set(texte))
+
+    #print(len(texte))
+    #print(len(subsampling(texte)))
+    #print(subsampling(texte))
+
+    texte=subsampling(texte)
 
     trained_word_embeddings,list_loss = train_word_embeddings(texte, embedding_size, k, window_size,learning_rate,neg_number)
     #trained_word_embeddings,list_loss=train_word_embeddings_parallel(texte, embedding_size, k, window_size,learning_rate,neg_number)

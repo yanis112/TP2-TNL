@@ -1,5 +1,4 @@
 numpy 
-nltk
 matplotlib.pyplot
 tqdm
 collections

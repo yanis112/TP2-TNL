@@ -305,12 +305,10 @@ def plot_loss_curve(loss_history):
     plt.show()
 
 # Paramètres
-embedding_size = 100  # Taille des embeddings (ajustez selon vos besoins)
-k = 5 # Nombre d'itérations (ajustez selon vos besoins)
-window_size = 2  # Taille de la fenêtre centrée k mots à gauche k mots à droites (ajustez selon vos besoins)
-learning_rate = 0.1  # Taux d'apprentissage (ajustez selon vos besoins)
-neg_number=10
-# Entraînement des embeddings
+embedding_size = 100  # Taille des embeddings 
+k = 5 # Nombre d'itérations 
+window_size = 2  # Taille de la fenêtre centrée k mots à gauche k mots à droites 
+learning_rate = 0.1  # Taux d'apprentissage 
 
 if __name__ == '__main__':
 

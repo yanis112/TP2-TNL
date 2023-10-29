@@ -1,11 +1,12 @@
+from collections import Counter
+import math
 import matplotlib.pyplot as plt
-from nltk.tokenize import word_tokenize  # Assurez-vous d'avoir installé NLTK via pip
 import numpy as np
 from tqdm import tqdm
+from sklearn.metrics.pairwise import cosine_similarity
+import random
 
-PATH="C:/Users/Yanis/Documents/Cours Centrale Marseille/NLP/tlnl_tp1_data/alexandre_dumas/Le_comte_de_Monte_Cristo.test.tok"
-PATH="C:/Users/Yanis/Documents/Cours Centrale Marseille/NLP/tlnl_tp1_data/alexandre_dumas/Le_comte_de_Monte_Cristo.train.tok"
-
+from w2v import PATH_test, PATH_train
 def openfile(file: str) -> list[str]:
     """
     prend un chemin ou une liste de chemain vers un ou des fichier(s) texte(s) 
@@ -163,7 +164,6 @@ def compute_grad_m(m, cpos, cneg_list):
 
 from sklearn.metrics.pairwise import cosine_similarity
 import random
-
 
 
 def select_negative_samples(context_word, vocab, word_embeddings, threshold, num_negatives):
