@@ -1,0 +1,8 @@
+numpy 
+nltk
+matplotlib.pyplot
+tqdm
+collections
+math
+random
+sklearn

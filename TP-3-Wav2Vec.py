@@ -3,7 +3,6 @@ from nltk.tokenize import word_tokenize  # Assurez-vous d'avoir installé NLTK v
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
-
 PATH="C:/Users/Yanis/Documents/Cours Centrale Marseille/NLP/tlnl_tp1_data/alexandre_dumas/Le_comte_de_Monte_Cristo.test.tok"
 PATH="C:/Users/Yanis/Documents/Cours Centrale Marseille/NLP/tlnl_tp1_data/alexandre_dumas/Le_comte_de_Monte_Cristo.train.tok"
 

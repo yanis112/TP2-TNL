@@ -1,13 +1,11 @@
-import numpy as np
-from nltk.tokenize import word_tokenize  # Assurez-vous d'avoir installé NLTK via pip
-import matplotlib.pyplot as plt
-from tqdm import tqdm
-import multiprocessing
 from collections import Counter
 import math
+import matplotlib.pyplot as plt
+import numpy as np
+from nltk.tokenize import word_tokenize  # Assurez-vous d'avoir installé NLTK via pip
 import random
 from sklearn.metrics.pairwise import cosine_similarity
-import random
+from tqdm import tqdm
 
 
 
