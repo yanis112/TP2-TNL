@@ -1,9 +1,26 @@
-import numpy as np
+from collections import Counter
+import math
 import matplotlib.pyplot as plt
+import numpy as np
+import os
 from tqdm import tqdm
+from sklearn.metrics.pairwise import cosine_similarity
+import random
+
+## Paramètres
+
+embedding_size = 100  # Taille des embeddings  
+k = 5 # Nombre d'itérations  
+window_size = 5  # Taille de la fenêtre centrée  
+learning_rate = 0.1  # Taux d'apprentissage  
+neg_number = 10 
+window_size = 3  # Taille de la fenêtre glissante
+
 
 PATH_test="./data/Le_comte_de_Monte_Cristo.test.tok"
 PATH_train="./data/Le_comte_de_Monte_Cristo.train.tok"
+PATH_EMBEDDING="./embeddings/"
+
 
 def openfile(file: str) -> list[str]:
     """
@@ -17,35 +34,8 @@ def openfile(file: str) -> list[str]:
             if line[-1] == '\n':
                 line = line[:-2]
             line = line.split(' ')
-
             text += line[2 : -2]
-
     return text
-
-# Fonction pour créer la matrice de co-occurrence
-
-def create_co_occurrence_matrix(text, window_size):
-    # Tokenisation du texte en mots
-    words = text
-    # Création d'un vocabulaire unique à partir des mots dans le texte
-    vocab = list(set(words))
-    
-    # Initialisation de la matrice de co-occurrence
-    co_occurrence_matrix = np.zeros((len(vocab), len(vocab)), dtype=int)
-    
-    # Remplissage de la matrice de co-occurrence
-    for i, target_word in enumerate(words):
-        for j in range(max(0, i - window_size), min(len(words), i + window_size + 1)):
-            if i != j:  # S'assurer que le mot cible ne soit pas lui-même
-                context_word = words[j]
-                if context_word in vocab and target_word in vocab:
-                    co_occurrence_matrix[vocab.index(target_word)][vocab.index(context_word)] += 1
-    
-    return co_occurrence_matrix, vocab
-
-
-# Taille de la fenêtre glissante
-window_size = 3
 
 def sigmoid(x):
     return 1 / (1 + np.exp(-x))
@@ -58,67 +48,62 @@ def proba_negative(m, c):
     dot_product = np.dot(m, c)
     return 1 - sigmoid(dot_product)
 
-# Fonction pour calculer la perte
+def calculate_deletion_probabilities(text, seuil):
+    '''
+    renvoie le dictionnaire des probabilités de délétion
+    '''   
+    word_frequencies = Counter(text)  # Compter les occurrences de chaque mot
+    total_words = len(text) 
+    # Calculer les fréquences relatives de chaque mot
+    relative_frequencies = {word: frequency / total_words for word, frequency in word_frequencies.items()}
+    # Calculer les probabilités de suppression pour chaque mot
+    deletion_probabilities = {word: 1 - math.sqrt(seuil / relative_frequency) for word, relative_frequency in relative_frequencies.items()}
+    return deletion_probabilities
+
+
+def subsampling(text):
+    '''
+    Fonction qui réalise le subsampling du texte: on supprime une partie des mots qui ont des occurences trop nombreuses EX: "le" car ils ne contiennent pas d'info
+    la probabilité de supprimer le mot dépend d'un seuil et de sa fréquence dans le corpus.
+    '''
+    dictio_suppr=calculate_deletion_probabilities(text, 10e-5)
+    new_text=[]
+    for k in text:
+        probkeep= 1-dictio_suppr[k]
+        if random.random()<probkeep:
+            new_text.append(k)
+    return(new_text)
+
+
 def compute_loss(m, cpos, cneg_list):
     """
     Calcule la valeur de la fonction de perte définie par la formule donnée.
-
-    Args:
-        m (numpy.ndarray): Le vecteur m.
-        cpos (numpy.ndarray): Le vecteur cpos.
-        cneg_list (list): Une liste de vecteurs cneg.
-
-    Returns:
-        float: La valeur de la perte.
     """
     p_pos = sigmoid(np.dot(cpos, m))
-    p_neg_sum = np.sum(np.log(sigmoid(-np.dot(cneg, m))) for cneg in cneg_list)
-    
+    p_neg_sum = np.sum(np.fromiter((np.log(sigmoid(-np.dot(cneg, m))) for cneg in cneg_list), dtype=float))
     loss = -np.log(p_pos)-p_neg_sum
     return loss
 
-# Fonction pour calculer le gradient par rapport à cpos
+
 def compute_grad_cpos(m, cpos):
     """
     Calcule le gradient de la perte par rapport au vecteur cpos.
-
-    Args:
-        m (numpy.ndarray): Le vecteur m.
-        cpos (numpy.ndarray): Le vecteur cpos.
-
-    Returns:
-        numpy.ndarray: Le gradient par rapport à cpos.
     """
     grad_cpos = (sigmoid(np.dot(cpos, m)) - 1) * m
     return grad_cpos
 
-# Fonction pour calculer le gradient par rapport à cneg
+
 def compute_grad_cneg(m, cneg):
     """
     Calcule le gradient de la perte par rapport à un vecteur cneg.
-
-    Args:
-        m (numpy.ndarray): Le vecteur m.
-        cneg (numpy.ndarray): Le vecteur cneg.
-
-    Returns:
-        numpy.ndarray: Le gradient par rapport à cneg.
     """
     grad_cneg = sigmoid(np.dot(cneg, m)) * m
     return grad_cneg
 
-# Fonction pour calculer le gradient par rapport à m
+
 def compute_grad_m(m, cpos, cneg_list):
     """
     Calcule le gradient de la perte par rapport au vecteur m.
-
-    Args:
-        m (numpy.ndarray): Le vecteur m.
-        cpos (numpy.ndarray): Le vecteur cpos.
-        cneg_list (list): Une liste de vecteurs cneg.
-
-    Returns:
-        numpy.ndarray: Le gradient par rapport à m.
     """
     grad_m = (sigmoid(np.dot(cpos, m)) - 1) * cpos
     for cneg in cneg_list:
@@ -126,28 +111,53 @@ def compute_grad_m(m, cpos, cneg_list):
     return grad_m
 
 
-# Fonction pour créer des embeddings aléatoires pour chaque mot unique
+def select_negative_samples(context_word, vocab, word_embeddings, threshold, num_negatives):
+    """
+    Créer un échantillon d'exemples négatifs de taille num_negatives en prenant en compte le vocabulaire, 
+    le seuil ainsi que les mots du contexte
+    """
+    negative_samples = []
+    count_negatives = 0
+    vocabulary=vocab
+    # Mélanger le vocabulaire pour parcourir aléatoirement
+    random.shuffle(vocabulary)
+    for word in vocabulary:
+        if count_negatives >= num_negatives:  # Vérifier s'il y a assez de mots négatifs
+            break
+        # Calcul de la similarité entre le mot cible et le mot potentiellement négatif
+        similarity = cosine_similarity(word_embeddings[word].reshape(1,-1),word_embeddings[context_word].reshape(1,-1))[0][0]
+        #print(similarity)
+        # Si la similarité est inférieure au seuil, ajouter le mot potentiellement négatif
+        if similarity > threshold:
+            negative_samples.append(word)
+            count_negatives += 1 
+    return negative_samples
+
+
 def create_word_embeddings(text, embedding_size):
+    """
+    Créer des embeddings aléatoires pour chaque mot unique
+    """
     # Créer un vocabulaire unique à partir du texte
     vocab = list(set(text))
     # Initialiser un dictionnaire pour stocker les embeddings de chaque mot
     word_embeddings = {}
-    
     # Générer des embeddings aléatoires pour chaque mot du vocabulaire
     for word in vocab:
         word_embeddings[word] = np.random.rand(embedding_size)
-    
     return word_embeddings
 
-# Fonction pour l'entraînement des embeddings
+
 def train_word_embeddings(text, embedding_size, k, window_size,learning_rate,neg_number):
+    """
+    E,traînement des embeddings
+    """
     # Créer des embeddings initiaux pour chaque mot du texte
     word_embeddings = create_word_embeddings(text, embedding_size)
-    print("embeddings crées")
-     # Initialiser une liste pour enregistrer la perte à chaque itération
-    loss_history = []
+    print("Embeddings créés")
+    loss_history = []  # Initialiser une liste pour enregistrer la perte à chaque itération
     
-    # Boucle d'entraînement
+    # Boucle d'entraînement sur un nombre d'itérations (k)
     for iteration in range(k):
         print(f"Itération {iteration + 1}/{k}")
         # Parcourir chaque mot dans le texte
@@ -156,14 +166,13 @@ def train_word_embeddings(text, embedding_size, k, window_size,learning_rate,neg
             window_start = max(0, target_word_index - window_size)
             window_end = min(len(text), target_word_index + window_size + 1)
             context_word_index = np.random.randint(window_start, window_end)
+            while target_word_index==context_word_index:
+                context_word_index = np.random.randint(window_start, window_end)
             context_word = text[context_word_index]
             
             # Sélectionner 4 mots négatifs au hasard
-            #negative_samples = [word for word in text if word != target_word][:4] #  c'est toujours les mêmes !!
             negative_samples = np.random.choice(text, size=neg_number, replace=False)
             negative_samples = [word for word in negative_samples if word != target_word]
-            
-            # Calculer les gradients en utilisant les fonctions de dérivées
             cpos = word_embeddings[context_word]
             cneg_list = [word_embeddings[neg_word] for neg_word in negative_samples]
             
@@ -176,44 +185,43 @@ def train_word_embeddings(text, embedding_size, k, window_size,learning_rate,neg
             word_embeddings[context_word] -= learning_rate * grad_cpos
             for i, neg_word in enumerate(negative_samples):
                 word_embeddings[neg_word] -= learning_rate * grad_cneg_list[i]
-            # Calculer et enregistrer la perte à la fin de chaque itération
             current_loss = compute_loss(word_embeddings[target_word], cpos, cneg_list)
             loss_history.append(current_loss)
     
-    
     return word_embeddings, loss_history
 
-# Fonction pour enregistrer les embeddings dans un fichier texte au format spécifié
+
 def save_word_embeddings_to_file(embeddings, filename):
+    """
+    Enregistrer les embeddings dans un fichier texte au format demandé
+    """
     with open(filename, 'w', encoding='utf8') as f:
         # Écrire le nombre de plongements et la dimension
         f.write(f"{len(embeddings)} {len(embeddings[next(iter(embeddings))])}\n")
-        
         # Écrire chaque mot et son embedding
         for word, embedding in embeddings.items():
             embedding_str = ' '.join(str(value) for value in embedding)
             f.write(f"{word} {embedding_str}\n")
 
 
-# Fonction pour tracer la courbe d'apprentissage
 def plot_loss_curve(loss_history):
+    """
+    Tracer la courbe d'apprentissage
+    """
     plt.plot(range(1, len(loss_history) + 1), loss_history)
     plt.xlabel('Itération')
     plt.ylabel('Perte')
     plt.title('Courbe d\'apprentissage')
     plt.show()
 
-# Paramètres
-embedding_size = 100  # avec 50 on a obtenu 53% accuracy # Taille des embeddings
-iternb = 5  # Nombre d'itérations 
-window_size = 5  # Taille de la fenêtre centrée 
-learning_rate = 0.1  # Taux d'apprentissage 
-neg_number=10  # nombre de samples out
 
-if __name__ == "__main__":
-    texte=openfile(PATH_test)
-    # print(texte)
-    trained_word_embeddings,list_loss = train_word_embeddings(texte, embedding_size, iternb, window_size,learning_rate,neg_number)
-    save_word_embeddings_to_file(trained_word_embeddings,'embeddings.txt')
-    print("embeddings saved in file !!")
+if __name__ == '__main__':
+    #On définit le texte et le vocabulaire
+    texte=openfile(PATH_train)
+    vocab=list(set(texte))
+    
+    texte=subsampling(texte)
+    trained_word_embeddings, list_loss = train_word_embeddings(texte, embedding_size, k, window_size,learning_rate,neg_number)
+    save_word_embeddings_to_file(trained_word_embeddings, os.path.join(PATH_EMBEDDING, 'embeddings.txt'))
+    print("Embeddings enregistrés !")
     plot_loss_curve(list_loss)
