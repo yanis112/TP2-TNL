@@ -1,7 +1,7 @@
 import numpy as np
 
 PATH_EVAL="./data/Le_comte_de_Monte_Cristo.100.sim"
-PATH_EMBEDDING="./embeddings/embeddings_amelioration.txt"
+PATH_EMBEDDING="./embeddings/embeddings_amelioration_yanis.txt"
 
 def recuperation_eval(path_eval=PATH_EVAL):
     """
@@ -74,7 +74,7 @@ def get_embedding(mot, mots, embeddings):
         return(embeddings[ind])
     except:
         print("Word out of vocabulary, putting embedding 0")
-        return([0 for k in range(50)])
+        return([0 for k in range(100)])
 
 
 def cosine_similarity(vector1, vector2):
