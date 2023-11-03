@@ -15,22 +15,25 @@ L = 5  # Taille des contextes gauche et droit
 eta = 0.1  # Taux d'apprentissage  
 k = 10  # Le nombre de contextes négatifs par contexte positif
 e = 5 # Nombre d'itérations  
+minc = 3 # Fréquence minimale d'un mot pour être considéré comme un mot du vocabulaire
 
 seuil = 1e-5
 
 
-def calculate_subsampling_probabilities(text, seuil=seuil):
+def calculate_subsampling_probabilities(text, seuil=seuil, minc=minc):
     '''
-    renvoie le dictionnaire des probabilités de délétion dans le cas du subsampling en prenant un seuil en compte
+    renvoie le dictionnaire des probabilités de délétion dans le cas du subsampling en prenant un seuil en compte,
+    si un mot a un nombre d'apparition inférieur à minc, il est imméditament supprimé
     '''
     word_frequencies = Counter(text)  # Compte les occurrences de chaque mot
     total_words = len(text)  # Calcule le nombre total de mots dans le corpus
     # Calcule les fréquences relatives de chaque mot
     relative_frequencies = {word: frequency**(3/4) / total_words for word, frequency in word_frequencies.items()}
     # Calculez les probabilités de suppression pour chaque mot
-    deletion_probabilities = {word: 1 - math.sqrt(seuil / relative_frequency) for word, relative_frequency in relative_frequencies.items()}
+    deletion_probabilities = {
+        word: 1 - math.sqrt(seuil / relative_frequency) for word, relative_frequency in relative_frequencies.items()
+    }
     return deletion_probabilities
-
 
 def subsampling(text):
     '''
@@ -113,6 +116,6 @@ if __name__ == '__main__':
 
     # On lance l'entraînement
     trained_word_embeddings, list_loss = train_word_embeddings(texte, n, e, L, eta, k)
-    save_word_embeddings_to_file(trained_word_embeddings, os.path.join(PATH_EMBEDDING, 'embeddings_ameliore_train.txt'))
+    save_word_embeddings_to_file(trained_word_embeddings, os.path.join(PATH_EMBEDDING, 'embeddings_ameliore_train.txt'),minc,texte)
     print("Embeddings enregistrés !")
     plot_loss_curve(list_loss)

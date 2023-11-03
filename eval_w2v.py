@@ -1,7 +1,7 @@
 import numpy as np
 
 PATH_EVAL="./data/Le_comte_de_Monte_Cristo.100.sim"
-PATH_EMBEDDING="./embeddings/embeddings_amelioration_yanis.txt"
+PATH_EMBEDDING="./embeddings/embeddings_ameliore_train.txt"                        #embeddings_amelioration_yanis.txt
 
 def recuperation_eval(path_eval=PATH_EVAL):
     """
@@ -39,7 +39,7 @@ def recuperation_embedding(path_embedding=PATH_EMBEDDING):
                 partie = ligne.split()
                 # Pour la deuxième ligne, "espace" comme mot et tout le reste de la ligne comme embedding
                 mot = " "
-                print("PARTIE:",partie)
+                #print("PARTIE:",partie)
                 # Convertir l'embedding en liste de nombres
                 embedding = [float(val) for val in partie]
                 # Ajouter le mot et l'embedding aux listes respectives
@@ -60,9 +60,9 @@ def recuperation_embedding(path_embedding=PATH_EMBEDDING):
                 mots.append(mot)
                 embeddings.append(embedding)
 
-    print("Mots :", mots[1])
-    print("Embeddings :", embeddings[1])
-    print("len_embedd:",len(embeddings[1]))
+    #print("Mots :", mots[1])
+    #print("Embeddings :", embeddings[1])
+    #print("len_embedd:",len(embeddings[1]))
     return mots, embeddings
 
 def get_embedding(mot, mots, embeddings):
@@ -73,8 +73,8 @@ def get_embedding(mot, mots, embeddings):
         ind=mots.index(mot)
         return(embeddings[ind])
     except:
-        print("Word out of vocabulary, putting embedding 0")
-        return([0 for k in range(100)])
+        print("Word out of vocabulary !")
+        return(False)
 
 
 def cosine_similarity(vector1, vector2):
@@ -99,17 +99,20 @@ def evaluate(colonne1,colonne2,colonne3):
     """
     good = 0
     for k in range(len(colonne1)):
-        a, b, c = get_embedding(colonne1[k],mots,embeddings), get_embedding(colonne2[k],mots,embeddings), get_embedding(colonne3[k],mots,embeddings)
-        sim1, sim2 = cosine_similarity(a,b), cosine_similarity(a,c)
-        if sim1>sim2:
-            good+=1
+        try:
+            a, b, c = get_embedding(colonne1[k],mots,embeddings), get_embedding(colonne2[k],mots,embeddings), get_embedding(colonne3[k],mots,embeddings)
+            sim1, sim2 = cosine_similarity(a,b), cosine_similarity(a,c)
+            if sim1>sim2:
+                good+=1
+        except:
+            print("Word out of vocabulary, pas comptabilisé")
     return(100*good/len(colonne1))
 
 
 if __name__ == "__main__":
     colonne1, colonne2, colonne3 = recuperation_eval()
     mots, embeddings = recuperation_embedding()
-    print("embeddding found", get_embedding('homme', mots, embeddings))
+    #print("embeddding found", get_embedding('homme', mots, embeddings))
     print("ACCURACY: ", evaluate(colonne1, colonne2, colonne3),"%")
 
 

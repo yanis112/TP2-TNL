@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import tqdm
+from collections import Counter
 
 ## Paramètres
 
@@ -9,13 +10,14 @@ L = 5  # Taille de la fenêtre centrée
 eta = 0.1  # Taux d'apprentissage  
 k = 10  # Le nombre de contextes négatifs pour un contexte positif
 e = 1 # Nombre d'itérations  
-
-# minc = 2
+minc = 2 # Fréquence minimale d'un mot pour être considéré comme un mot du vocabulaire
 
 
 PATH_test="./data/Le_comte_de_Monte_Cristo.test.tok"
 PATH_train="./data/Le_comte_de_Monte_Cristo.train.tok"
 PATH_EMBEDDING="./embeddings/"
+
+
 
 
 def openfile(file: str) -> list[str]:
@@ -76,15 +78,16 @@ def compute_grad_m(m, cpos, cneg_list):
     return grad_m
 
 
-def create_word_embeddings(text, n):
+def create_word_embeddings(text, n,minc=2):
     """
     Créer des embeddings aléatoires pour chaque mot unique
     """
     # Créer un vocabulaire unique à partir du texte
     vocab = list(set(text))
+  
     # Initialiser un dictionnaire pour stocker les embeddings de chaque mot
     word_embeddings = {}
-    # Générer des embeddings aléatoires pour chaque mot du vocabulaire
+    # Générer des embeddings aléatoires pour chaque mot du vocabulaire, uniquement si le mot apparaît au moins minc fois
     for word in vocab:
         word_embeddings[word] = np.random.rand(n)
     return word_embeddings
@@ -97,6 +100,7 @@ def train_word_embeddings(text, n, e, L, eta, k):
     # Créer des embeddings initiaux pour chaque mot du texte
     word_embeddings = create_word_embeddings(text, n)
     print("Embeddings initiaux créés")
+    print("word_embeddings:",word_embeddings)
     loss_history = []  # Initialiser une liste pour enregistrer la perte à chaque itération
     
     # Boucle d'entraînement sur un nombre d'itérations e
@@ -133,17 +137,22 @@ def train_word_embeddings(text, n, e, L, eta, k):
     return word_embeddings, loss_history
 
 
-def save_word_embeddings_to_file(embeddings, filename):
+def save_word_embeddings_to_file(embeddings, filename,minc,texte):
     """
     Enregistrer les embeddings dans un fichier texte au format demandé
     """
     with open(filename, 'w', encoding='utf8') as f:
         # Écrire le nombre de plongements et la dimension
         f.write(f"{len(embeddings)} {len(embeddings[next(iter(embeddings))])}\n")
-        # Écrire chaque mot et son embedding
+        # Écrire chaque mot et son embedding uniquement si la fréquence du mot est supérieure à minc
+        freq=Counter(texte)
         for word, embedding in embeddings.items():
-            embedding_str = ' '.join(str(value) for value in embedding)
-            f.write(f"{word} {embedding_str}\n")
+            print(freq[word])
+            if freq[word]>=minc: # si la fréquence du mot est supérieure à minc on l'écrit dans le fichier sinon on passe au mot suivant
+                embedding_str = ' '.join(str(value) for value in embedding)
+                f.write(f"{word} {embedding_str}\n")
+            else:
+                print(f"Le mot {word} n'est pas écrit dans le fichier car sa fréquence est inférieure à {minc} !!")
 
 
 def plot_loss_curve(loss_history):
@@ -164,6 +173,6 @@ if __name__ == '__main__':
 
     # On lance l'entraînement
     trained_word_embeddings,list_loss = train_word_embeddings(texte, n, e, L, eta, k)
-    save_word_embeddings_to_file(PATH_EMBEDDING,'embeddings_train.txt')
+    save_word_embeddings_to_file(PATH_EMBEDDING,'embeddings_train.txt',minc,texte)
     print("Embeddings enregistrés !")
     plot_loss_curve(list_loss)
