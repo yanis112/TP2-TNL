@@ -1,7 +1,8 @@
 import numpy as np
 
 PATH_EVAL="./data/Le_comte_de_Monte_Cristo.100.sim"
-PATH_EMBEDDING="./embeddings/embeddings_ameliore_train.txt"                        #embeddings_amelioration_yanis.txt
+PATH_EMBEDDING="./embeddings/embeddings_amelioration.txt"  
+                      #embeddings_amelioration_yanis.txt
 
 def recuperation_eval(path_eval=PATH_EVAL):
     """

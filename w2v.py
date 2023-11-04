@@ -13,11 +13,8 @@ e = 1 # Nombre d'itérations
 minc = 2 # Fréquence minimale d'un mot pour être considéré comme un mot du vocabulaire
 
 
-PATH_test="./data/Le_comte_de_Monte_Cristo.test.tok"
 PATH_train="./data/Le_comte_de_Monte_Cristo.train.tok"
 PATH_EMBEDDING="./embeddings/"
-
-
 
 
 def openfile(file: str) -> list[str]:
@@ -34,6 +31,7 @@ def openfile(file: str) -> list[str]:
             line = line.split(' ')
             text += line[2 : -2]
     return text
+
 
 def sigmoid(x):
     ''' 
@@ -78,13 +76,12 @@ def compute_grad_m(m, cpos, cneg_list):
     return grad_m
 
 
-def create_word_embeddings(text, n,minc=2):
+def create_word_embeddings(text, n, minc=minc):
     """
     Créer des embeddings aléatoires pour chaque mot unique
     """
     # Créer un vocabulaire unique à partir du texte
     vocab = list(set(text))
-  
     # Initialiser un dictionnaire pour stocker les embeddings de chaque mot
     word_embeddings = {}
     # Générer des embeddings aléatoires pour chaque mot du vocabulaire, uniquement si le mot apparaît au moins minc fois
@@ -137,7 +134,7 @@ def train_word_embeddings(text, n, e, L, eta, k):
     return word_embeddings, loss_history
 
 
-def save_word_embeddings_to_file(embeddings, filename,minc,texte):
+def save_word_embeddings_to_file(embeddings, filename, minc, texte):
     """
     Enregistrer les embeddings dans un fichier texte au format demandé
     """
@@ -170,9 +167,8 @@ if __name__ == '__main__':
     # On définit le texte et le vocabulaire
     texte=openfile(PATH_train)  # liste de mots du texte
     vocab=list(set(texte))  # liste des mots uniques du texte
-
     # On lance l'entraînement
     trained_word_embeddings,list_loss = train_word_embeddings(texte, n, e, L, eta, k)
-    save_word_embeddings_to_file(PATH_EMBEDDING,'embeddings_train.txt',minc,texte)
+    # save_word_embeddings_to_file(PATH_EMBEDDING,'embeddings_train.txt', minc, texte)
     print("Embeddings enregistrés !")
     plot_loss_curve(list_loss)

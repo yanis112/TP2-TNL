@@ -5,7 +5,7 @@ import os
 from tqdm import tqdm
 import random
 
-from w2v import PATH_test, PATH_train, PATH_EMBEDDING
+from w2v import PATH_train, PATH_EMBEDDING
 from w2v import openfile, compute_loss, compute_grad_m, compute_grad_cneg, compute_grad_cpos, create_word_embeddings, save_word_embeddings_to_file, plot_loss_curve
 
 ## Paramètres
@@ -37,7 +37,8 @@ def calculate_subsampling_probabilities(text, seuil=seuil, minc=minc):
 
 def subsampling(text):
     '''
-    Fonction qui réalise le subsampling du texte: on supprime une partie des mots qui ont des occurences trop nombreuses EX: "le" car ils ne contiennent pas d'info
+    réalise le subsampling du texte: on supprime une partie des mots qui ont des occurences trop nombreuses 
+    EX: "le" car ils ne contiennent pas d'info
     la probabilité de supprimer le mot dépend d'un seuil et de sa fréquence dans le corpus.
     '''
     dictio_suppr=calculate_subsampling_probabilities(text, 10e-5)
@@ -51,7 +52,7 @@ def subsampling(text):
 
 def negative_sampling(dictionnaire_probabilites, k):
     ''' 
-    Fonction qui renvoie une liste de k mots tirés aléatoirement selon les probabilités du dictionnaire
+    renvoie une liste de k mots tirés aléatoirement selon les probabilités du dictionnaire
     '''
     if k <= 0:
         raise ValueError("La valeur de k doit être supérieure à zéro.")
@@ -68,7 +69,7 @@ def train_word_embeddings(text, n, e, L, eta, k):
     """
     word_embeddings = create_word_embeddings(text, n)  # Créer des embeddings initiaux pour chaque mot du texte
     print("Embeddings initiaux créés")
-    text=subsampling(text)  #Nous appliquons le subsampling du texte pour éliminer les mots trop redondants
+    text=subsampling(text)  # Nous appliquons le subsampling du texte pour éliminer les mots trop redondants
     dict_frequencies=calculate_subsampling_probabilities(text)  # Dictionnaire des probabilités de délétion pour le subsampling
     loss_history = []  # Initialiser une liste pour enregistrer la perte à chaque itération
 
@@ -107,15 +108,13 @@ def train_word_embeddings(text, n, e, L, eta, k):
 
 
 if __name__ == '__main__':
-    #On définit le texte et le vocabulaire
+    # On définit le texte et le vocabulaire
     texte=openfile(PATH_train)
     vocab=list(set(texte))
-
     # On applique le subsampling
     texte=subsampling(texte)
-
     # On lance l'entraînement
     trained_word_embeddings, list_loss = train_word_embeddings(texte, n, e, L, eta, k)
-    save_word_embeddings_to_file(trained_word_embeddings, os.path.join(PATH_EMBEDDING, 'embeddings_ameliore_train.txt'),minc,texte)
+    save_word_embeddings_to_file(trained_word_embeddings, os.path.join(PATH_EMBEDDING, 'embeddings_amelioration_train.txt'), minc, texte)
     print("Embeddings enregistrés !")
     plot_loss_curve(list_loss)
